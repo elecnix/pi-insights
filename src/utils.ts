@@ -17,7 +17,11 @@ export const formatCost = (c: number): string => {
   return '< $0.000001';
 };
 
+// 21 colors: 20 distinct colors + 1 for "Other"
 export const COLORS = [
   '#60a5fa', '#f472b6', '#a78bfa', '#fbbf24', '#34d399',
-  '#fb923c', '#22d3ee', '#f87171', '#818cf8', '#a3e635'
+  '#fb923c', '#22d3ee', '#f87171', '#818cf8', '#a3e635',
+  '#e879f9', '#fde047', '#2dd4bf', '#c084fc', '#fca5a5',
+  '#7dd3fc', '#fcd34d', '#a5b4fc', '#94a3b8', '#fdba74',
+  '#93c5fd' // Color for "Other"
 ];

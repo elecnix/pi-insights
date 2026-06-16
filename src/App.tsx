@@ -101,8 +101,8 @@ function DailyChartSection({
 }) {
   const [metric, setMetric] = useState<'Sessions' | 'Tokens' | 'Cost'>('Sessions');
 
-  // Get all unique models, sorted by total contribution
-  const allModels = useMemo(() => {
+  // Get top 20 models, rest aggregated as "Other"
+  const displayModels = useMemo(() => {
     const modelTotals: Record<string, number> = {};
     for (const day of dailyModelStats) {
       for (const [modelName, modelData] of Object.entries(day.models)) {
@@ -112,24 +112,40 @@ function DailyChartSection({
         modelTotals[modelName] = (modelTotals[modelName] ?? 0) + value;
       }
     }
-    return Object.keys(modelTotals).sort((a, b) => (modelTotals[b] ?? 0) - (modelTotals[a] ?? 0));
+    const sorted = Object.keys(modelTotals).sort((a, b) => (modelTotals[b] ?? 0) - (modelTotals[a] ?? 0));
+    const top20 = sorted.slice(0, 20);
+    if (sorted.length > 20) {
+      return [...top20, 'Other'];
+    }
+    return top20;
   }, [dailyModelStats, metric]);
 
-  // Transform data for stacked bar chart
+  // Transform data for stacked bar chart, aggregating non-top-20 into "Other"
   const stackedData = useMemo((): StackedDayData[] => {
-    return dailyModelStats.map(day => ({
-      date: localDate(day.date),
-      models: allModels,
-      metricByModel: Object.fromEntries(
-        Object.entries(day.models).map(([modelName, modelData]) => [
-          modelName,
-          metric === 'Sessions' ? modelData.sessions :
-          metric === 'Tokens' ? modelData.tokens / 1000 :
-          modelData.cost,
-        ])
-      ),
-    }));
-  }, [dailyModelStats, allModels, metric]);
+    const top20Set = new Set(displayModels.slice(0, 20));
+    return dailyModelStats.map(day => {
+      const metricByModel: Record<string, number> = {};
+      let otherValue = 0;
+      for (const [modelName, modelData] of Object.entries(day.models)) {
+        const value = metric === 'Sessions' ? modelData.sessions :
+                     metric === 'Tokens' ? modelData.tokens / 1000 :
+                     modelData.cost;
+        if (top20Set.has(modelName)) {
+          metricByModel[modelName] = value;
+        } else {
+          otherValue += value;
+        }
+      }
+      if (otherValue > 0) {
+        metricByModel['Other'] = otherValue;
+      }
+      return {
+        date: localDate(day.date),
+        models: displayModels,
+        metricByModel,
+      };
+    });
+  }, [dailyModelStats, displayModels, metric]);
 
   return (
     <div className="section">
@@ -219,14 +235,14 @@ function DailyChartSection({
                 }}
               />
               <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{ fontSize: 11 }} />
-              {allModels.map((model, i) => (
+              {displayModels.map((model, i) => (
                 <Bar
                   key={model}
                   dataKey={(entry: StackedDayData) => entry.metricByModel[model] ?? 0}
                   name={model}
                   stackId="stack"
                   fill={COLORS[i % COLORS.length]}
-                  radius={i === allModels.length - 1 ? [3, 3, 0, 0] : [0, 0, 0, 0]}
+                  radius={i === displayModels.length - 1 ? [3, 3, 0, 0] : [0, 0, 0, 0]}
                 />
               ))}
             </BarChart>
