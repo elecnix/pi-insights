@@ -74,6 +74,12 @@ export interface DailyStats {
   cost: number;
 }
 
+// Per-model breakdown for each day (for stacked charts)
+export interface DailyModelStats {
+  date: string;
+  models: Record<string, { sessions: number; tokens: number; cost: number }>;
+}
+
 export interface ProjectStats {
   name: string;
   sessions: number;
@@ -101,6 +107,7 @@ export interface Analytics {
   avgMessagesPerSession: number;
   dateRange: { start: string; end: string };
   dailyStats: DailyStats[];
+  dailyModelStats: DailyModelStats[];
   projectStats: ProjectStats[];
   modelStats: ModelStats[];
   topTools: { name: string; count: number }[];

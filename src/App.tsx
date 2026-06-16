@@ -84,16 +84,52 @@ const ModelBar = ({ name, value, max, color }: { name: string; value: number; ma
   </div>
 );
 
-// ── Daily Chart Section (tabbed: Sessions / Tokens / Cost) ──────────
+// ── Daily Chart Section (tabbed: Sessions / Tokens / Cost, stacked by model) ──────────
 
-function DailyChartSection({ data }: { data: Array<{ date: string; Sessions: number; Messages: number; Tokens: number; Cost: number }> }) {
+interface StackedDayData {
+  date: string;
+  models: string[];
+  metricByModel: Record<string, number>;
+}
+
+function DailyChartSection({
+  data,
+  dailyModelStats,
+}: {
+  data: Array<{ date: string; Sessions: number; Messages: number; Tokens: number; Cost: number }>;
+  dailyModelStats: Array<{ date: string; models: Record<string, { sessions: number; tokens: number; cost: number }> }>;
+}) {
   const [metric, setMetric] = useState<'Sessions' | 'Tokens' | 'Cost'>('Sessions');
 
-  const config = {
-    Sessions: { label: 'Sessions', color: '#888', yLabel: '' },
-    Tokens: { label: 'Tokens', color: '#888', yLabel: 'K' },
-    Cost: { label: 'Cost', color: '#888', yLabel: '$' },
-  };
+  // Get all unique models, sorted by total contribution
+  const allModels = useMemo(() => {
+    const modelTotals: Record<string, number> = {};
+    for (const day of dailyModelStats) {
+      for (const [modelName, modelData] of Object.entries(day.models)) {
+        const value = metric === 'Sessions' ? modelData.sessions :
+                     metric === 'Tokens' ? modelData.tokens / 1000 :
+                     modelData.cost;
+        modelTotals[modelName] = (modelTotals[modelName] ?? 0) + value;
+      }
+    }
+    return Object.keys(modelTotals).sort((a, b) => (modelTotals[b] ?? 0) - (modelTotals[a] ?? 0));
+  }, [dailyModelStats, metric]);
+
+  // Transform data for stacked bar chart
+  const stackedData = useMemo((): StackedDayData[] => {
+    return dailyModelStats.map(day => ({
+      date: localDate(day.date),
+      models: allModels,
+      metricByModel: Object.fromEntries(
+        Object.entries(day.models).map(([modelName, modelData]) => [
+          modelName,
+          metric === 'Sessions' ? modelData.sessions :
+          metric === 'Tokens' ? modelData.tokens / 1000 :
+          modelData.cost,
+        ])
+      ),
+    }));
+  }, [dailyModelStats, allModels, metric]);
 
   return (
     <div className="section">
@@ -122,14 +158,14 @@ function DailyChartSection({ data }: { data: Array<{ date: string; Sessions: num
                 marginBottom: -1,
               }}
             >
-              {m} per Day
+              {m} per Day (by Model)
             </button>
           ))}
         </div>
 
         <div style={{ padding: '16px 20px 20px' }}>
           <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+            <BarChart data={stackedData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" vertical={false} />
               <XAxis
                 dataKey="date"
@@ -149,12 +185,7 @@ function DailyChartSection({ data }: { data: Array<{ date: string; Sessions: num
               <Tooltip
                 content={({ active, payload, label }) => {
                   if (!active || !payload?.length) return null;
-                  const val = payload[0].value as number;
-                  const display = metric === 'Cost'
-                    ? '$' + val.toFixed(2)
-                    : metric === 'Tokens'
-                      ? (val * 1000).toLocaleString()
-                      : val.toLocaleString();
+                  const total = payload.reduce((sum: number, p: { value: number }) => sum + (p.value as number), 0);
                   return (
                     <div style={{
                       background: '#0f0f0f',
@@ -165,16 +196,39 @@ function DailyChartSection({ data }: { data: Array<{ date: string; Sessions: num
                       color: '#e8e8e8',
                     }}>
                       <div style={{ fontWeight: 600, color: '#fff', marginBottom: 4 }}>{label}</div>
-                      <div>{metric}: <span style={{ fontWeight: 500 }}>{display}</span></div>
+                      <div style={{ marginBottom: 4 }}>Total {metric}: <span style={{ fontWeight: 500 }}>{
+                        metric === 'Cost' ? '$' + total.toFixed(2) :
+                        metric === 'Tokens' ? (total * 1000).toLocaleString() :
+                        total.toLocaleString()
+                      }</span></div>
+                      <div style={{ borderTop: '1px solid #2a2a2a', paddingTop: 4, marginTop: 4 }}>
+                        {payload.map((p, i) => (
+                          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px', fontSize: '11px' }}>
+                            <div style={{ width: '8px', height: '8px', borderRadius: '2px', background: p.color || COLORS[i % COLORS.length] }} />
+                            <span style={{ color: '#aaa' }}>{p.dataKey}:</span>
+                            <span style={{ marginLeft: 'auto', fontWeight: 500 }}>
+                              {metric === 'Cost' ? '$' + (p.value as number).toFixed(2) :
+                               metric === 'Tokens' ? ((p.value as number) * 1000).toLocaleString() :
+                               (p.value as number).toLocaleString()}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   );
                 }}
               />
-              <Bar dataKey={metric} radius={[3, 3, 0, 0]}>
-                {data.map((_, i) => (
-                  <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                ))}
-              </Bar>
+              <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{ fontSize: 11 }} />
+              {allModels.map((model, i) => (
+                <Bar
+                  key={model}
+                  dataKey={(entry: StackedDayData) => entry.metricByModel[model] ?? 0}
+                  name={model}
+                  stackId="stack"
+                  fill={COLORS[i % COLORS.length]}
+                  radius={i === allModels.length - 1 ? [3, 3, 0, 0] : [0, 0, 0, 0]}
+                />
+              ))}
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -482,7 +536,7 @@ function App() {
             </div>
           </div>
 
-          <DailyChartSection data={dailyChartData} />
+          <DailyChartSection data={dailyChartData} dailyModelStats={data.dailyModelStats} />
 
           <div className="section">
             <div className="section-header">
