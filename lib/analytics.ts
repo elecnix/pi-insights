@@ -2,6 +2,7 @@ import type {
   ParsedSession,
   Analytics,
   DailyStats,
+  DailyModelStats,
   ProjectStats,
   ModelStats,
   RageStats,
@@ -24,6 +25,8 @@ export function computeAnalytics(sessions: ParsedSession[]): Analytics {
 
   // Daily stats
   const dailyMap = new Map<string, DailyStats>();
+  // Daily model breakdown for stacked charts
+  const dailyModelMap = new Map<string, DailyModelStats>();
   for (const sess of sorted) {
     const date = sess.startTime.toISOString().split("T")[0];
     const existing = dailyMap.get(date);
@@ -41,8 +44,38 @@ export function computeAnalytics(sessions: ParsedSession[]): Analytics {
         cost: sess.cost.total,
       });
     }
+
+    // Track per-model stats per day
+    const existingDay = dailyModelMap.get(date);
+    if (existingDay) {
+      for (const [modelName, modelStats] of Object.entries(sess.models)) {
+        const existingModel = existingDay.models[modelName];
+        if (existingModel) {
+          existingModel.sessions++;
+          existingModel.tokens += modelStats.tokens;
+          existingModel.cost += modelStats.cost;
+        } else {
+          existingDay.models[modelName] = {
+            sessions: 1,
+            tokens: modelStats.tokens,
+            cost: modelStats.cost,
+          };
+        }
+      }
+    } else {
+      dailyModelMap.set(date, {
+        date,
+        models: Object.fromEntries(
+          Object.entries(sess.models).map(([modelName, modelStats]) => [
+            modelName,
+            { sessions: 1, tokens: modelStats.tokens, cost: modelStats.cost },
+          ])
+        ),
+      });
+    }
   }
   const dailyStats = Array.from(dailyMap.values()).sort((a, b) => a.date.localeCompare(b.date));
+  const dailyModelStats = Array.from(dailyModelMap.values()).sort((a, b) => a.date.localeCompare(b.date));
 
   // Project stats
   const projectMap = new Map<string, ProjectStats>();
@@ -190,6 +223,7 @@ export function computeAnalytics(sessions: ParsedSession[]): Analytics {
       end: endDate.toISOString().split("T")[0],
     },
     dailyStats,
+    dailyModelStats,
     projectStats,
     modelStats,
     topTools,
@@ -241,6 +275,7 @@ function emptyAnalytics(): Analytics {
     avgMessagesPerSession: 0,
     dateRange: { start: "", end: "" },
     dailyStats: [],
+    dailyModelStats: [],
     projectStats: [],
     modelStats: [],
     topTools: [],

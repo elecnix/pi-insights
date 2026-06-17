@@ -6,7 +6,7 @@ Beautiful analytics reports for your [pi coding agent](https://pi.dev) sessions.
 
 ## Features
 
-- **Overview** — Activity calendar, sessions/tokens/cost per day, activity by hour, and top tools
+- **Overview** — Activity calendar, sessions/tokens/cost per day by model (stacked bar charts), activity by hour, and top tools
 - **Models** — Token distribution, per-model breakdown, thinking levels, and stop reasons
 - **Projects** — Per-project sessions, messages, tokens, and cost with sortable bars
 - **Sessions** — Searchable/filterable session table by project name or date
@@ -36,10 +36,16 @@ More screenshots:
 pi install npm:@ygncode/pi-insights
 ```
 
-### From GitHub
+### From GitHub (main)
 
 ```bash
 pi install git:github.com/ygncode/pi-insights
+```
+
+### From GitHub (fork with stacked charts)
+
+```bash
+pi install git:github.com/elecnix/pi-insights
 ```
 
 ### Try without installing
