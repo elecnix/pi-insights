@@ -218,17 +218,23 @@ function DailyChartSection({
                         total.toLocaleString()
                       }</span></div>
                       <div style={{ borderTop: '1px solid #2a2a2a', paddingTop: 4, marginTop: 4 }}>
-                        {payload.map((p, i) => (
-                          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px', fontSize: '11px' }}>
-                            <div style={{ width: '8px', height: '8px', borderRadius: '2px', background: p.color || COLORS[i % COLORS.length] }} />
-                            <span style={{ color: '#aaa' }}>{p.name}:</span>
-                            <span style={{ marginLeft: 'auto', fontWeight: 500 }}>
-                              {metric === 'Cost' ? '$' + (p.value as number).toFixed(2) :
-                               metric === 'Tokens' ? ((p.value as number) * 1000).toLocaleString() :
-                               (p.value as number).toLocaleString()}
-                            </span>
-                          </div>
-                        ))}
+                        {payload.map((p, i) => {
+                          // Find the color for this model from displayModels order
+                          const modelName = p.name as string;
+                          const modelIndex = displayModels.indexOf(modelName);
+                          const color = modelIndex >= 0 ? COLORS[modelIndex % COLORS.length] : COLORS[i % COLORS.length];
+                          return (
+                            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px', fontSize: '11px' }}>
+                              <div style={{ width: '8px', height: '8px', borderRadius: '2px', background: color }} />
+                              <span style={{ color: '#aaa' }}>{modelName}:</span>
+                              <span style={{ marginLeft: 'auto', fontWeight: 500 }}>
+                                {metric === 'Cost' ? '$' + (p.value as number).toFixed(2) :
+                                 metric === 'Tokens' ? ((p.value as number) * 1000).toLocaleString() :
+                                 (p.value as number).toLocaleString()}
+                              </span>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   );
