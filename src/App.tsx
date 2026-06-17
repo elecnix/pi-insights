@@ -218,7 +218,9 @@ function DailyChartSection({
                         total.toLocaleString()
                       }</span></div>
                       <div style={{ borderTop: '1px solid #2a2a2a', paddingTop: 4, marginTop: 4 }}>
-                        {payload.map((p, i) => {
+                        {payload
+                          .sort((a, b) => (b.value as number) - (a.value as number))
+                          .map((p, i) => {
                           // Find the color for this model from displayModels order
                           const modelName = p.name as string;
                           const modelIndex = displayModels.indexOf(modelName);
@@ -226,7 +228,7 @@ function DailyChartSection({
                           return (
                             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px', fontSize: '11px' }}>
                               <div style={{ width: '8px', height: '8px', borderRadius: '2px', background: color }} />
-                              <span style={{ color: '#aaa' }}>{modelName}:</span>
+                              <span style={{ color: '#aaa' }}>{modelName}</span>
                               <span style={{ marginLeft: 'auto', fontWeight: 500 }}>
                                 {metric === 'Cost' ? '$' + (p.value as number).toFixed(2) :
                                  metric === 'Tokens' ? ((p.value as number) * 1000).toLocaleString() :
