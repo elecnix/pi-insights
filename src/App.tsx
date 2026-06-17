@@ -84,16 +84,68 @@ const ModelBar = ({ name, value, max, color }: { name: string; value: number; ma
   </div>
 );
 
-// ── Daily Chart Section (tabbed: Sessions / Tokens / Cost) ──────────
+// ── Daily Chart Section (tabbed: Sessions / Tokens / Cost, stacked by model) ──────────
 
-function DailyChartSection({ data }: { data: Array<{ date: string; Sessions: number; Messages: number; Tokens: number; Cost: number }> }) {
+interface StackedDayData {
+  date: string;
+  models: string[];
+  metricByModel: Record<string, number>;
+}
+
+function DailyChartSection({
+  data,
+  dailyModelStats,
+}: {
+  data: Array<{ date: string; Sessions: number; Messages: number; Tokens: number; Cost: number }>;
+  dailyModelStats: Array<{ date: string; models: Record<string, { sessions: number; tokens: number; cost: number }> }>;
+}) {
   const [metric, setMetric] = useState<'Sessions' | 'Tokens' | 'Cost'>('Sessions');
 
-  const config = {
-    Sessions: { label: 'Sessions', color: '#888', yLabel: '' },
-    Tokens: { label: 'Tokens', color: '#888', yLabel: 'K' },
-    Cost: { label: 'Cost', color: '#888', yLabel: '$' },
-  };
+  // Get top 20 models, rest aggregated as "Other"
+  const displayModels = useMemo(() => {
+    const modelTotals: Record<string, number> = {};
+    for (const day of dailyModelStats) {
+      for (const [modelName, modelData] of Object.entries(day.models)) {
+        const value = metric === 'Sessions' ? modelData.sessions :
+                     metric === 'Tokens' ? modelData.tokens / 1000 :
+                     modelData.cost;
+        modelTotals[modelName] = (modelTotals[modelName] ?? 0) + value;
+      }
+    }
+    const sorted = Object.keys(modelTotals).sort((a, b) => (modelTotals[b] ?? 0) - (modelTotals[a] ?? 0));
+    const top20 = sorted.slice(0, 20);
+    if (sorted.length > 20) {
+      return [...top20, 'Other'];
+    }
+    return top20;
+  }, [dailyModelStats, metric]);
+
+  // Transform data for stacked bar chart, aggregating non-top-20 into "Other"
+  const stackedData = useMemo((): StackedDayData[] => {
+    const top20Set = new Set(displayModels.slice(0, 20));
+    return dailyModelStats.map(day => {
+      const metricByModel: Record<string, number> = {};
+      let otherValue = 0;
+      for (const [modelName, modelData] of Object.entries(day.models)) {
+        const value = metric === 'Sessions' ? modelData.sessions :
+                     metric === 'Tokens' ? modelData.tokens / 1000 :
+                     modelData.cost;
+        if (top20Set.has(modelName)) {
+          metricByModel[modelName] = value;
+        } else {
+          otherValue += value;
+        }
+      }
+      if (otherValue > 0) {
+        metricByModel['Other'] = otherValue;
+      }
+      return {
+        date: localDate(day.date),
+        models: displayModels,
+        metricByModel,
+      };
+    });
+  }, [dailyModelStats, displayModels, metric]);
 
   return (
     <div className="section">
@@ -122,14 +174,14 @@ function DailyChartSection({ data }: { data: Array<{ date: string; Sessions: num
                 marginBottom: -1,
               }}
             >
-              {m} per Day
+              {m} per Day (by Model)
             </button>
           ))}
         </div>
 
         <div style={{ padding: '16px 20px 20px' }}>
           <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+            <BarChart data={stackedData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" vertical={false} />
               <XAxis
                 dataKey="date"
@@ -149,12 +201,7 @@ function DailyChartSection({ data }: { data: Array<{ date: string; Sessions: num
               <Tooltip
                 content={({ active, payload, label }) => {
                   if (!active || !payload?.length) return null;
-                  const val = payload[0].value as number;
-                  const display = metric === 'Cost'
-                    ? '$' + val.toFixed(2)
-                    : metric === 'Tokens'
-                      ? (val * 1000).toLocaleString()
-                      : val.toLocaleString();
+                  const total = payload.reduce((sum: number, p: { value: number }) => sum + (p.value as number), 0);
                   return (
                     <div style={{
                       background: '#0f0f0f',
@@ -165,16 +212,47 @@ function DailyChartSection({ data }: { data: Array<{ date: string; Sessions: num
                       color: '#e8e8e8',
                     }}>
                       <div style={{ fontWeight: 600, color: '#fff', marginBottom: 4 }}>{label}</div>
-                      <div>{metric}: <span style={{ fontWeight: 500 }}>{display}</span></div>
+                      <div style={{ marginBottom: 4 }}>Total {metric}: <span style={{ fontWeight: 500 }}>{
+                        metric === 'Cost' ? '$' + total.toFixed(2) :
+                        metric === 'Tokens' ? (total * 1000).toLocaleString() :
+                        total.toLocaleString()
+                      }</span></div>
+                      <div style={{ borderTop: '1px solid #2a2a2a', paddingTop: 4, marginTop: 4 }}>
+                        {payload
+                          .sort((a, b) => (b.value as number) - (a.value as number))
+                          .map((p, i) => {
+                          // Find the color for this model from displayModels order
+                          const modelName = p.name as string;
+                          const modelIndex = displayModels.indexOf(modelName);
+                          const color = modelIndex >= 0 ? COLORS[modelIndex % COLORS.length] : COLORS[i % COLORS.length];
+                          return (
+                            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px', fontSize: '11px' }}>
+                              <div style={{ width: '8px', height: '8px', borderRadius: '2px', background: color }} />
+                              <span style={{ color: '#aaa' }}>{modelName}</span>
+                              <span style={{ marginLeft: 'auto', fontWeight: 500 }}>
+                                {metric === 'Cost' ? '$' + (p.value as number).toFixed(2) :
+                                 metric === 'Tokens' ? ((p.value as number) * 1000).toLocaleString() :
+                                 (p.value as number).toLocaleString()}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   );
                 }}
               />
-              <Bar dataKey={metric} radius={[3, 3, 0, 0]}>
-                {data.map((_, i) => (
-                  <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                ))}
-              </Bar>
+              <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{ fontSize: 11 }} />
+              {displayModels.map((model, i) => (
+                <Bar
+                  key={model}
+                  dataKey={(entry: StackedDayData) => entry.metricByModel[model] ?? 0}
+                  name={model}
+                  stackId="stack"
+                  fill={COLORS[i % COLORS.length]}
+                  radius={i === displayModels.length - 1 ? [3, 3, 0, 0] : [0, 0, 0, 0]}
+                />
+              ))}
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -482,7 +560,7 @@ function App() {
             </div>
           </div>
 
-          <DailyChartSection data={dailyChartData} />
+          <DailyChartSection data={dailyChartData} dailyModelStats={data.dailyModelStats} />
 
           <div className="section">
             <div className="section-header">
