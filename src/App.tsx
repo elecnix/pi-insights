@@ -221,7 +221,7 @@ function DailyChartSection({
                         {payload.map((p, i) => (
                           <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px', fontSize: '11px' }}>
                             <div style={{ width: '8px', height: '8px', borderRadius: '2px', background: p.color || COLORS[i % COLORS.length] }} />
-                            <span style={{ color: '#aaa' }}>{p.dataKey}:</span>
+                            <span style={{ color: '#aaa' }}>{p.name}:</span>
                             <span style={{ marginLeft: 'auto', fontWeight: 500 }}>
                               {metric === 'Cost' ? '$' + (p.value as number).toFixed(2) :
                                metric === 'Tokens' ? ((p.value as number) * 1000).toLocaleString() :
